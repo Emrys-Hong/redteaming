@@ -8,11 +8,15 @@ from lightning_fabric import seed_everything
 
 from training import LightningModel
 
+from modeling import select_model
+
 
 def test_model(
     path: str,
+    test_model_name: str,
+    test_model_path: str,
     prompt: str = "",
-    max_length: int = 160,
+    max_length: int = 256,
     device: str = "cuda",
 ):
     if not prompt:
@@ -20,18 +24,26 @@ def test_model(
 
     model: LightningModel = LightningModel.load_from_checkpoint(path)
     tokenizer = model.tokenizer
-    input_ids = tokenizer(prompt, return_tensors="pt").input_ids
+    # seed_everything(model.hparams.seed)
+    prompt = 'Generate RedTeaming prompt:'
+    print(prompt)
+    test_model = select_model(test_model_name, model_path=test_model_path)
 
-    seed_everything(model.hparams.seed)
-    with torch.inference_mode():
-        model.model.eval()
-        model = model.to(device)
-        input_ids = input_ids.to(device)
-        outputs = model.model.generate(
-            input_ids=input_ids, max_length=max_length, do_sample=True
-        )
+    while True:
+        input_ids = tokenizer(prompt, return_tensors="pt").input_ids
 
-    print(tokenizer.decode(outputs[0]))
+        with torch.inference_mode():
+            model.model.eval()
+            model = model.to(device)
+            input_ids = input_ids.to(device)
+            outputs = model.model.generate(
+                input_ids=input_ids, max_length=max_length, do_sample=True, temperature=0.3,
+            )
+            human = tokenizer.decode(outputs[0], skip_special_tokens=True)
+            print('Human: ', human)
+            assistant = test_model.run(human)
+            print('Assistant: ', assistant)
+            prompt = prompt + '\n' + human + '\n' + assistant
 
     """
     Example output (outputs/model/base/epoch=2-step=2436.ckpt):

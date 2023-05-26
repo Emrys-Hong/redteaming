@@ -201,6 +201,9 @@ def main(raw_args=None):
         verbose=True,
         dirpath=args.output_dir,
         save_weights_only=True,
+        every_n_train_steps=1000,
+        save_top_k=-1,
+        save_on_train_epoch_end=True,
     )
 
     strategy = "auto"
@@ -291,6 +294,18 @@ p training.py --output_dir outputs/model/xl \
 --train_batch_size 1 \
 --gradient_accumulation_steps 64
 
+
+
+++++++++++++++++++++++++++++
+python training.py --output_dir outputs/model/xxl-redteam \
+--use_fsdp \
+--train_epochs 3 \
+--max_source_length 256 \
+--max_target_length 64 \
+--data_path data/redteam.json \
+--model_name_or_path "google/flan-t5-xxl" \
+--train_batch_size 1 \
+--gradient_accumulation_steps 64
 """
 
 
