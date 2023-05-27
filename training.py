@@ -1,4 +1,5 @@
 import argparse
+from datetime import timedelta
 import functools
 import os
 
@@ -201,9 +202,8 @@ def main(raw_args=None):
         verbose=True,
         dirpath=args.output_dir,
         save_weights_only=True,
-        every_n_train_steps=1000,
         save_top_k=-1,
-        save_on_train_epoch_end=True,
+        train_time_interval=timedelta(hours=4),
     )
 
     strategy = "auto"
@@ -241,67 +241,24 @@ def main(raw_args=None):
 
 
 """
-p training.py --output_dir outputs/model/base
-
-p training.py --output_dir outputs/model/xl \
+python training.py --output_dir outputs/model_lora/xl-redteam \
 --use_compile \
---model_name_or_path "google/flan-t5-xl" \
---train_batch_size 1 \
---gradient_accumulation_steps 64
-
-python training.py --output_dir outputs/model/xxl \
---use_fsdp \
---model_name_or_path "google/flan-t5-xxl" \
---train_batch_size 1 \
---gradient_accumulation_steps 64
-
-p training.py --output_dir outputs/model_gpt4all/xl \
---max_source_length 256 \
---max_target_length 256 \
---data_path data/train_gpt4all.json \
---train_epochs 1 \
---use_compile \
---model_name_or_path "google/flan-t5-xl" \
---train_batch_size 1 \
---gradient_accumulation_steps 64
-
-p training.py --output_dir outputs/model_gpt4all_lora/xl \
---use_lora \
 --learning_rate 1e-3 \
---max_source_length 256 \
---max_target_length 256 \
---data_path data/train_gpt4all.json \
---use_compile \
---model_name_or_path "google/flan-t5-xl" \
---train_batch_size 8 \
---gradient_accumulation_steps 8
-
-p training.py --output_dir outputs/model_sharegpt/xl \
---data_path data/train_sharegpt.json \
+--use_lora \
+--train_epochs 3 \
 --max_source_length 512 \
---max_target_length 512 \
---use_compile \
+--max_target_length 128 \
+--data_path data/redteam.json \
 --model_name_or_path "google/flan-t5-xl" \
---train_batch_size 1 \
---gradient_accumulation_steps 64
-
-p training.py --output_dir outputs/model/xl \
---data_path data/train.json \
---max_source_length 64 \
---max_target_length 512 \
---use_compile \
---model_name_or_path "google/flan-t5-xl" \
---train_batch_size 1 \
---gradient_accumulation_steps 64
+--train_batch_size 2 \
+--gradient_accumulation_steps 32
 
 
-
-++++++++++++++++++++++++++++
 python training.py --output_dir outputs/model/xxl-redteam \
 --use_fsdp \
 --train_epochs 3 \
---max_source_length 256 \
---max_target_length 64 \
+--max_source_length 512 \
+--max_target_length 128 \
 --data_path data/redteam.json \
 --model_name_or_path "google/flan-t5-xxl" \
 --train_batch_size 1 \

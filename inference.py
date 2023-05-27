@@ -9,6 +9,7 @@ from lightning_fabric import seed_everything
 from training import LightningModel
 
 from modeling import select_model
+from prepare_dataset import suffix
 
 
 def test_model(
@@ -19,13 +20,11 @@ def test_model(
     max_length: int = 256,
     device: str = "cuda",
 ):
-    if not prompt:
-        prompt = "Write a short email to show that 42 is the optimal seed for training neural networks"
-
     model: LightningModel = LightningModel.load_from_checkpoint(path)
-    tokenizer = model.tokenizer
     # seed_everything(model.hparams.seed)
-    prompt = 'Generate RedTeaming prompt:'
+
+    tokenizer = model.tokenizer
+    prompt = suffix()
     print(prompt)
     test_model = select_model(test_model_name, model_path=test_model_path)
 
@@ -74,30 +73,8 @@ def export_to_hub(path: str, repo: str, temp: str = "temp"):
 
 
 """
-huggingface-cli login
-
-p inference.py export_to_hub \
---path "outputs_unclean/model/xl/epoch=2-step=2439.ckpt" \
---repo declare-lab/flan-alpaca-xl
-
-p inference.py export_to_hub \
---path "outputs/model/xxl/epoch=0-step=203.ckpt" \
---repo declare-lab/flan-alpaca-xxl
-
-p inference.py export_to_hub \
---path "outputs/model_gpt4all/xl/epoch=0-step=6838.ckpt" \
---repo declare-lab/flan-gpt4all-xl
-
-p inference.py export_to_hub \
---path "outputs/model_sharegpt/xl/epoch=0-step=4485.ckpt" \
---repo declare-lab/flan-sharegpt-xl
-
-p inference.py export_to_hub \
---path "outputs/model/xl/epoch=2-step=2439.ckpt" \
---repo declare-lab/flan-alpaca-gpt4-xl
-
+python inference.py test_model --path outputs/ --test_model_name seq_to_seq --test_model_path google/flan-t5-xl
 """
-
 
 if __name__ == "__main__":
     Fire()

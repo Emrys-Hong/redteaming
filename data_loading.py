@@ -128,7 +128,7 @@ class TextToTextDataset(Dataset):
         x = self.tokenizer(
             text,
             max_length=self.max_source_length if is_source else self.max_target_length,
-            # padding="max_length",
+            padding="max_length",
             truncation=not is_source,
             return_tensors="pt",
         )
