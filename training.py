@@ -9,6 +9,7 @@ from peft import LoraConfig, TaskType, get_peft_model
 from pytorch_lightning import seed_everything
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.strategies import FSDPStrategy
+from pytorch_lightning.loggers import WandbLogger
 from torch.distributed.fsdp import (
     MixedPrecision,
     FullyShardedDataParallel,
@@ -206,6 +207,8 @@ def main(raw_args=None):
         train_time_interval=timedelta(hours=4),
     )
 
+    wandb_logger = WandbLogger()
+
     strategy = "auto"
     if args.use_fsdp:
         # https://pytorch.org/blog/efficient-large-scale-training-with-pytorch/
@@ -233,7 +236,7 @@ def main(raw_args=None):
         gradient_clip_val=None if args.use_fsdp else 1.0,
         max_epochs=args.train_epochs,
         callbacks=[saver],
-        logger=False,
+        logger=wandb_logger,
         overfit_batches=10 if args.debug else 0,
     )
 
