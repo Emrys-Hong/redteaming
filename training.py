@@ -257,9 +257,11 @@ python training.py --output_dir outputs/model_lora/xl-redteam \
 --gradient_accumulation_steps 32
 
 
-python training.py --output_dir outputs/model/xxl-redteam \
---use_fsdp \
+python training.py --output_dir outputs/model_lora/xxl-redteam \
+--use_compile \
 --train_epochs 3 \
+--use_lora \
+--learning_rate 1e-3 \
 --max_source_length 512 \
 --max_target_length 128 \
 --data_path data/redteam.json \

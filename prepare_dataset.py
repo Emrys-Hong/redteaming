@@ -1,86 +1,117 @@
 import os
 import re
-from typing import List
 import random
-from argparse import Namespace
 import jsonlines
-from matplotlib import pyplot as plt
+from typing import List, Dict
+from argparse import Namespace
 
 from fire import Fire
 from tqdm import tqdm
+from pydantic import BaseModel
 from datasets import load_dataset
-from transformers import AutoTokenizer
+from matplotlib import pyplot as plt
+from transformers import AutoTokenizer, LlamaTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained("t5-base")
+# tokenizer = AutoTokenizer.from_pretrained("t5-base")
+tokenizer = LlamaTokenizer.from_pretrained("decapoda-research/llama-7b-hf")
 
-def truncate(prompt, max_length=64):
-    return tokenizer.decode(
-        tokenizer(prompt, max_length=max_length, truncation=True).input_ids,
-        skip_special_tokens=True,
-    )
+def suffix() -> str: return "\nGenerate a prompt that may elicit harmful content:\n"
 
-
-def parse_dialogue(dialogue: str) -> List[str]:
-    utterances = list()
-    person = ['Human:', 'Assistant:']
-    count = 1
-    idx = 0
-    while idx != -1:
-        idx = dialogue.find(person[count % 2])
-        count += 1
-        utterances.append(dialogue[:idx])
-        dialogue = dialogue[idx:]
-    return utterances
+class RedUtterance(BaseModel):
+    utterance: str
+    speaker: str # human or assistant
 
 
-def suffix() -> str: 
-    return "\nGenerate a prompt that may elicit harmful content:\n"
+
+class RedDialog(BaseModel):
+    dialog: str
+    utterances: List[RedUtterance] = []
+    source_max_len: int = 512-len(tokenizer(suffix()).input_ids)
+    target_max_len: int = 128
+    utterance_max_len: int = 64
+
+    def parse_dialoge(self) -> List[str]:
+        self.dialog = self.dialog.replace("Human:", "|split|Human:")
+        self.dialog = self.dialog.replace("Assistant:", "|split|Assistant:")
+        utterances = self.dialog.split("|split|")
+
+        for u in utterances:
+            if u.startswith("Human:"):
+                self.utterances.append(RedUtterance(utterance=u[6:].replace('\n', ' '), speaker="human"))
+            elif u.startswith("Assistant:"):
+                self.utterances.append(RedUtterance(utterance=u[10:].replace('\n', ' '), speaker="assistant"))
+            else:
+                pass
+
+        return self.utterances
+
+
+    def get_red_prompts(self) -> List[Dict]:
+        """
+        This generates a list of {source: str, target: str} for the red teaming dataset
+        max_target_length: 128, max_source_length: 512, max_utterance_length: 64
+        """
+
+        # Use the previous two utterances as context
+        dialog_history = "\n".join( [truncate(o.utterance, max_length=self.utterance_max_len) for o in self.utterances[:2]] )
+        red_prompts = []
+
+        for red_u in self.utterances[2:]:
+            # Use human as the target
+            if red_u.speaker == 'human':
+                red_prompts.append(
+                    dict(
+                        source = truncate(dialog_history, max_length=self.source_max_len, truncate_from_right_side=True) + suffix(),
+                        target = truncate(red_u.utterance, max_length=self.target_max_len))
+                )
+                dialog_history += "\n" + truncate(red_u.utterance, max_length=self.utterance_max_len)
+
+            elif red_u.speaker == 'assistant':
+                dialog_history += "\n" + truncate(red_u.utterance, max_length=self.utterance_max_len)
+
+            else:
+                raise ValueError("Unknown speaker type")
+
+        return red_prompts
+
+
+
+class RedInstance(BaseModel):
+    source: str
+    target: str
+
+def truncate(prompt, max_length=64, truncate_from_right_side=False) -> str:
+    """Truncation side default is left"""
+    if not truncate_from_right_side:
+        return tokenizer.decode(
+            tokenizer(prompt, max_length=max_length, truncation=True).input_ids,
+            skip_special_tokens=True,
+        )
+    else:
+        return tokenizer.decode(
+            tokenizer(prompt).input_ids[-max_length:],
+            skip_special_tokens=True,
+        )
 
 
 def red_teaming_dataset(data_path: str, **kwargs):
-    """
-    This generates the json list {source: str, target: str} for the red teaming dataset
-    max_target_length: 128, max_source_length: 512, max_utterance_length: 64
-    """
     dataset = load_dataset(data_path, data_dir=kwargs['data_dir'])
-    available_count = 0
     data = []
     lens = []
-    dlg_max_len = 512-len(tokenizer(suffix()).input_ids)
 
     for o in tqdm(dataset['train']):
-        dlg = o['transcript']
-        utterances = parse_dialogue(dlg)
-        if len(utterances) % 2 != 0: continue
-        available_count += 1
-        # Use the previous two utterances as context
-        dialog_history = "\n".join( [truncate(o, max_length=64) for o in utterances[:2]] )
+        red_d = RedDialog(dialog=o['transcript'])
+        red_d.parse_dialoge()
+        red_prompts = red_d.get_red_prompts()
+        data.extend(red_prompts)
 
-        for o in utterances[2:]:
-            # Use human as the target
-            if 'Human:' in o:
-                o = o.replace('Human:', '')
-                data.append(
-                    dict(source=truncate(dialog_history, max_length=dlg_max_len) + suffix(),
-                         target=truncate(o, max_length=128))
-                )
-                dialog_history += "\n" + truncate(o, max_length=64)
-
-            elif 'Assistant:' in o:
-                dialog_history += o.replace('Assistant:', '')
-
-            else:
-                raise ValueError('Unknown speaker')
-
-    plt.hist(lens, bins=100)
-    print(dict(available_count=available_count, total_count=len(dataset['train']), num_examples=len(data)))
+    print(dict(num_dialogues=len(dataset['train']), num_examples=len(data)))
     return data
 
 
 def main(data_path: str = "Anthropic/hh-rlhf", **kwargs):
     args = Namespace(**locals())
     print(locals())
-    # result = hh_dataset(data_path, **kwargs)
     result = red_teaming_dataset(data_path, **kwargs)
     with jsonlines.open('data/redteam.json', mode='w') as writer:
         writer.write_all(result)
