@@ -9,7 +9,7 @@ from lightning_fabric import seed_everything
 from training import LightningModel
 
 from modeling import select_model
-from prepare_dataset import suffix
+from prepare_dataset import suffix, sample_seed_prompt
 
 
 
@@ -25,25 +25,27 @@ def test_model(
     # seed_everything(model.hparams.seed)
 
     tokenizer = model.tokenizer
-    prompt = suffix()
-    print(prompt)
     test_model = select_model(test_model_name, model_path=test_model_path)
 
     while True:
-        input_ids = tokenizer(prompt, return_tensors="pt").input_ids
+        prompt = sample_seed_prompt() + suffix()
+        print(prompt)
 
-        with torch.inference_mode():
-            model.model.eval()
-            model = model.to(device)
-            input_ids = input_ids.to(device)
-            outputs = model.model.generate(
-                input_ids=input_ids, max_length=max_length, do_sample=True, temperature=0.3,
-            )
-            human = tokenizer.decode(outputs[0], skip_special_tokens=True)
-            print('Human: ', human)
-            assistant = test_model.run(human)
-            print('Assistant: ', assistant)
-            prompt = prompt + '\n' + human + '\n' + assistant
+        for i in range(3):
+            input_ids = tokenizer(prompt, return_tensors="pt").input_ids
+
+            with torch.inference_mode():
+                model.model.eval()
+                model = model.to(device)
+                input_ids = input_ids.to(device)
+                outputs = model.model.generate(
+                    input_ids=input_ids, max_length=max_length, do_sample=True, temperature=0.3,
+                )
+                human = tokenizer.decode(outputs[0], skip_special_tokens=True)
+                print('Human: ', human)
+                assistant = test_model.run(human)
+                print('Assistant: ', assistant)
+                prompt = prompt + '\n' + human + '\n' + assistant
 
 
 """
