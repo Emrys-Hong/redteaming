@@ -253,8 +253,8 @@ python training.py --output_dir outputs/model_lora/xl-redteam \
 --max_target_length 128 \
 --data_path data/redteam.json \
 --model_name_or_path "google/flan-t5-xl" \
---train_batch_size 2 \
---gradient_accumulation_steps 32
+--train_batch_size 1 \
+--gradient_accumulation_steps 64
 
 
 python training.py --output_dir outputs/model_lora/xxl-redteam \
@@ -262,6 +262,16 @@ python training.py --output_dir outputs/model_lora/xxl-redteam \
 --train_epochs 3 \
 --use_lora \
 --learning_rate 1e-3 \
+--max_source_length 512 \
+--max_target_length 128 \
+--data_path data/redteam.json \
+--model_name_or_path "google/flan-t5-xxl" \
+--train_batch_size 1 \
+--gradient_accumulation_steps 64
+
+python training.py --output_dir outputs/vicuna-xxl/ \
+--use_fsdp \
+--train_epochs 3 \
 --max_source_length 512 \
 --max_target_length 128 \
 --data_path data/redteam.json \
