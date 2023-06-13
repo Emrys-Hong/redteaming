@@ -10,6 +10,7 @@ from peft import LoraConfig, TaskType, get_peft_model
 from pytorch_lightning import seed_everything
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.strategies.fsdp import MixedPrecision
+from torch.autograd.grad_mode import inference_mode
 from torch.distributed.fsdp.wrap import transformer_auto_wrap_policy
 from torch.utils.data import DataLoader
 from transformers import (
@@ -17,6 +18,7 @@ from transformers import (
     LlamaTokenizer,
     AdamW,
     get_cosine_schedule_with_warmup,
+    BitsAndBytesConfig,
 )
 from transformers.models.llama.modeling_llama import (
     LlamaDecoderLayer,
@@ -88,6 +90,8 @@ def init_args(raw_args):
     parser.add_argument("--use_compile", action="store_true")
     parser.add_argument("--use_gradient_checkpointing", action="store_true")
     parser.add_argument("--use_fsdp", action="store_true")
+    parser.add_argument("--use_lora", action="store_true")
+    parser.add_argument("--use_qlora", action="store_true")
     parser.add_argument("--use_fast_attention", action="store_true")
     parser.add_argument("--debug", action="store_true")
 
@@ -100,8 +104,32 @@ class LightningModel(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters(hparams)
         print(self.hparams)
-        self.model = LlamaForCausalLM.from_pretrained(self.hparams.model_name_or_path)
+        if self.hparams.use_qlora:
+            model = LlamaForCausalLM.from_pretrained(
+                self.hparams.model_name_or_path,
+                load_in_4bit=True,
+                device_map='auto',
+                max_memory=48,
+                torch_dtype=torch.bfloat16,
+                quantization_config=BitsAndBytesConfig(
+                    load_in_4bit=True,
+                    bnb_4bit_compute_dtype=torch.bfloat16,
+                    bnb_4bit_use_double_quant=True,
+                    bnb_4bit_quant_type='nf4'
+                ),
+            )
+        else:
+            self.model = LlamaForCausalLM.from_pretrained(self.hparams.model_name_or_path)
         print(dict(orig_state_dict=len(self.model.state_dict())))
+        if self.hparams.use_lora:
+            lora_config = LoraConfig(
+                task_type=TaskType.CAUSAL_LM,
+                inference_mode=False,
+                r=8,
+                lora_alpha=32,
+                lora_dropout=0.1,
+            )
+            self.model = get_peft_model(self.model, lora_config)
         if self.hparams.use_compile:
             self.model = torch.compile(self.model)
         if self.hparams.use_gradient_checkpointing:
@@ -213,14 +241,17 @@ def main(raw_args=None):
 
 
 """
-python training_llama.py --output_dir outputs/llama/7b \
---model_name_or_path huggyllama/llama-7b \
---learning_rate 2e-5 \
+python training_llama.py \
+--output_dir outputs/VicUnlocked-alpaca-65B-QLoRA-fp16/65b \
+--model_name_or_path TheBloke/VicUnlocked-alpaca-65B-QLoRA-fp16 \
+--use_qlora \
+--learning_rate 2e-4 \
 --train_batch_size 1 \
 --gradient_accumulation_steps 64 \
 --use_fast_attention \
---use_fsdp \
+--use_compile \
 --max_length 2048
+# --use_fsdp
 
 """
 
