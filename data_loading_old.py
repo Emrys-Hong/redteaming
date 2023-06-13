@@ -4,7 +4,6 @@ from collections import Counter
 from pathlib import Path
 from typing import List, Optional, Dict
 
-import torch
 from datasets import load_dataset
 from fire import Fire
 from pydantic import BaseModel, Field
@@ -166,36 +165,6 @@ class TextToTextDataset(Dataset):
         return dict(source=source, target=target)
 
 
-class CausalDataset(Dataset):
-    def __init__(self, path: str, tokenizer: PreTrainedTokenizer, max_length: int):
-        self.max_length = max_length
-        self.tokenizer = tokenizer
-        self.data = TextToTextData.load(path)
-        self.sequences = self.load_sequences()
-
-    def load_sequences(self):
-        indices = []
-        random.seed(len(self.data.samples))
-        random.shuffle(self.data.samples)
-        for sample in tqdm(self.data.samples, desc="load_indices"):
-            text = sample.source + "\n" + sample.target
-            indices.extend(self.tokenizer(text).input_ids)
-
-        sequences = []
-        for i in range(0, len(indices), self.max_length):
-            seq = indices[slice(i, i + self.max_length)]
-            if len(seq) == self.max_length:
-                sequences.append(seq)
-        return sequences
-
-    def __len__(self) -> int:
-        return len(self.sequences)
-
-    def __getitem__(self, i: int) -> dict:
-        sequence = torch.tensor(self.sequences[i])
-        return dict(input_ids=sequence, labels=sequence)
-
-
 def preprocess_alpaca(
     path_in: str = "data/alpaca.json", path_out: str = "data/train.json"
 ):
@@ -230,24 +199,6 @@ def preprocess_gpt4all(
     with open(path_out, "w") as f:
         for raw in tqdm(data, desc=path_out):
             print(json.dumps(raw), file=f)
-
-
-def preprocess_lamini(
-    path_in: str = "MBZUAI/LaMini-instruction",
-    path_out="data/train_lamini.json",
-    limit: int = 100000,
-):
-    samples = []
-    for raw in tqdm(load_dataset(path_in, split="train"), desc=path_in):
-        samples.append(dict(source=raw["instruction"], target=raw["response"]))
-
-    if limit > 0:
-        random.seed(limit)
-        samples = random.sample(samples, k=limit)
-
-    data = TextToTextData(samples=samples)
-    data.analyze()
-    data.save(path_out)
 
 
 class ShareGPTConversation(BaseModel):
@@ -393,36 +344,6 @@ def preprocess_sharegpt(
     data = raw.as_data()
     data.analyze()
     data.save(path_out)
-
-
-def merge_sample_data(
-    *paths: str,
-    path_out: str,
-    equal_size: bool = True,
-    num_sample: int = 0,
-    seed: int = 0
-):
-    datasets = [TextToTextData.load(p) for p in paths]
-    if equal_size:
-        length = min(len(data.samples) for data in datasets)
-        random.seed(seed)
-        for data in datasets:
-            if len(data.samples) > length:
-                data.samples = random.sample(data.samples, k=length)
-
-    samples = [s for data in datasets for s in data.samples]
-    if num_sample > 0:
-        samples = random.sample(samples, k=num_sample)
-
-    data = TextToTextData(samples=samples)
-    data.analyze()
-    data.save(path_out)
-
-
-"""
-p data_loading.py merge_sample_data data/train.json data/flan_mini.jsonl --path_out data/flan_alpaca.json
-p data_loading.py merge_sample_data data/flan_mini.jsonl --path_out data/flan_52k.json --num_sample 52000
-"""
 
 
 if __name__ == "__main__":
