@@ -105,11 +105,11 @@ class LightningModel(pl.LightningModule):
         self.save_hyperparameters(hparams)
         print(self.hparams)
         if self.hparams.use_qlora:
-            model = LlamaForCausalLM.from_pretrained(
+            self.model = LlamaForCausalLM.from_pretrained(
                 self.hparams.model_name_or_path,
                 load_in_4bit=True,
                 device_map='auto',
-                max_memory=48,
+                max_memory={i: '46000MB' for i in range(torch.cuda.device_count())},
                 torch_dtype=torch.bfloat16,
                 quantization_config=BitsAndBytesConfig(
                     load_in_4bit=True,

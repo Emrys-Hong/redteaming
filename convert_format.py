@@ -1,22 +1,25 @@
 import json, jsonlines
+from tqdm import tqdm
 
-with open("merged_behavior_clone.json") as f:
+with open("./data/merged_behavior_clone.json") as f:
     raw = json.load(f)
 
 data = []
 
-"""
-### Instruction:
+source_template = """
+### Instruction: {instruction}
 
-<prompt> (without the <>)
-
-### Response:
+{prompt}
 """
-template = "{instruction}\n\n{input}"
-with jsonlines.open("train.json", "w") as writer:
-     for o in raw:
+
+target_template = """
+### Response: {response}
+"""
+
+with jsonlines.open("./data/train.json", "w") as writer:
+     for o in tqdm(raw):
         writer.write(dict(
-            source=template.format(instruction=o["instruction"], input=o["input"]),
-            target=o["output"]
+            source=source_template.format(instruction=o["instruction"], prompt=o["input"]),
+            target=target_template.format(response=o["output"])
         ))
 
